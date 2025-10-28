@@ -118,8 +118,54 @@
                 0 10px 30px rgba(0, 0, 0, 0.2),
                 inset 0 -3px 0 rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
-            display: none;
             animation: slideIn 0.5s;
+        }
+
+        .audio-item {
+            background: #f0f9f4;
+            border: 2px solid #48c774;
+            border-radius: 15px;
+            padding: 15px;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .audio-item:hover {
+            background: #e8f5e9;
+            transform: translateX(5px);
+            box-shadow: 0 3px 10px rgba(72, 199, 116, 0.3);
+        }
+
+        .audio-item-name {
+            color: #2db55d;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        .audio-item-play {
+            font-size: 1.5rem;
+        }
+
+        .audio-item.playing {
+            background: #48c774;
+            color: white;
+        }
+
+        .audio-item.playing .audio-item-name {
+            color: white;
+        }
+
+        .audio-item-count {
+            background: rgba(45, 181, 93, 0.2);
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            margin-left: 10px;
+            color: #2db55d;
         }
 
         @keyframes slideIn {
@@ -383,19 +429,24 @@
 
         <!-- Sección Escáner -->
         <div id="scanner" class="section active">
-            <div class="scanner-container">
+            <div id="startScreen" class="scanner-container" style="text-align: center; padding: 40px 20px;">
+                <div style="font-size: 4rem; margin-bottom: 20px;">📱</div>
+                <h2 style="color: #2db55d; margin-bottom: 20px;">¡Escanea un código QR!</h2>
+                <p style="color: #555; margin-bottom: 30px; font-size: 1.1rem;">
+                    Apunta la cámara a cualquier código QR para escuchar el mensaje de las plantas 🌱
+                </p>
+                <button class="btn-3d" onclick="startScanner()" style="width: 100%;">
+                    📷 Activar Cámara
+                </button>
+            </div>
+
+            <div id="scannerActive" class="scanner-container hidden">
                 <div id="reader"></div>
             </div>
 
-            <div id="audioPlayer" class="audio-player">
-                <div class="audio-info">
-                    <div class="audio-icon">🎵</div>
-                    <div class="audio-title" id="audioTitle">Reproduciendo audio...</div>
-                </div>
-                <audio id="audioElement" controls autoplay>
-                    Tu navegador no soporta el elemento de audio.
-                </audio>
-            </div>
+            <audio id="audioElement" style="display: none;">
+                Tu navegador no soporta el elemento de audio.
+            </audio>
         </div>
 
         <!-- Sección Admin -->
@@ -414,15 +465,13 @@
                         <p><strong>Escaneos totales:</strong> <span id="totalScans">0</span></p>
                         <p><strong>Audios disponibles:</strong> <span id="totalAudios">3</span></p>
                         <p><strong>Último escaneo:</strong> <span id="lastScan">Ninguno</span></p>
+                        <p><strong>Audio más reproducido:</strong> <span id="mostPlayed">Ninguno</span></p>
                     </div>
                     
                     <div class="stats">
                         <h3>🎵 Audios Configurados</h3>
-                        <ul id="audioList" style="list-style: none; padding: 0;">
-                            <li style="padding: 5px 0;">🌿 planta001.mp3</li>
-                            <li style="padding: 5px 0;">🌿 planta002.mp3</li>
-                            <li style="padding: 5px 0;">🌿 planta003.mp3</li>
-                        </ul>
+                        <p style="color: #666; margin-bottom: 10px; font-size: 0.9rem;">Haz clic en un audio para probarlo</p>
+                        <div id="audioList"></div>
                     </div>
 
                     <button class="btn-3d" onclick="resetStats()" style="width: 100%; margin-top: 15px; background: linear-gradient(to bottom, #ff6b6b 0%, #ee5a52 100%); box-shadow: 0 6px 0 #c92a2a, 0 10px 20px rgba(0, 0, 0, 0.3);">
@@ -477,15 +526,17 @@
         let html5QrcodeScanner;
         let stats = {
             totalScans: 0,
-            lastScan: 'Ninguno'
+            lastScan: 'Ninguno',
+            audioPlays: {}
         };
 
-        // Cargar estadísticas guardadas
-        const savedStats = {
-            totalScans: 0,
-            lastScan: 'Ninguno'
-        };
-        stats = savedStats;
+        // Inicializar contador de reproducciones
+        audioFiles.forEach(audio => {
+            stats.audioPlays[audio] = 0;
+        });
+
+        let currentlyPlayingElement = null;
+        let isScanning = false;
 
         // Navegación entre secciones
         function showSection(sectionName) {
@@ -494,6 +545,10 @@
             
             document.getElementById(sectionName).classList.add('active');
             event.target.classList.add('active');
+
+            if (sectionName === 'admin') {
+                updateAdminStats();
+            }
         }
 
         // Admin
@@ -503,20 +558,90 @@
                 document.getElementById('adminLogin').style.display = 'none';
                 document.getElementById('adminContent').classList.add('unlocked');
                 updateAdminStats();
+                renderAudioList();
             } else {
                 alert('❌ Contraseña incorrecta');
             }
+        }
+
+        function renderAudioList() {
+            const audioList = document.getElementById('audioList');
+            audioList.innerHTML = '';
+            
+            audioFiles.forEach((audio, index) => {
+                const playCount = stats.audioPlays[audio] || 0;
+                const audioItem = document.createElement('div');
+                audioItem.className = 'audio-item';
+                audioItem.id = `audio-item-${index}`;
+                audioItem.innerHTML = `
+                    <div>
+                        <span class="audio-item-name">🌿 ${audio}</span>
+                        <span class="audio-item-count">${playCount} reproducciones</span>
+                    </div>
+                    <span class="audio-item-play">▶️</span>
+                `;
+                audioItem.onclick = () => testAudio(audio, index);
+                audioList.appendChild(audioItem);
+            });
+        }
+
+        function testAudio(audioFile, index) {
+            const audioPath = `audios/${audioFile}`;
+            const testAudio = new Audio(audioPath);
+            
+            // Remover clase playing de todos los items
+            document.querySelectorAll('.audio-item').forEach(item => {
+                item.classList.remove('playing');
+                item.querySelector('.audio-item-play').textContent = '▶️';
+            });
+            
+            const audioItem = document.getElementById(`audio-item-${index}`);
+            audioItem.classList.add('playing');
+            audioItem.querySelector('.audio-item-play').textContent = '⏸️';
+            
+            testAudio.play().catch(error => {
+                console.error("Error al reproducir audio:", error);
+                // Si falla, intentar con el siguiente
+                tryNextAudio(audioFile);
+            });
+
+            testAudio.onended = () => {
+                audioItem.classList.remove('playing');
+                audioItem.querySelector('.audio-item-play').textContent = '▶️';
+            };
         }
 
         function updateAdminStats() {
             document.getElementById('totalScans').textContent = stats.totalScans;
             document.getElementById('totalAudios').textContent = audioFiles.length;
             document.getElementById('lastScan').textContent = stats.lastScan;
+            
+            // Encontrar el audio más reproducido
+            let mostPlayed = 'Ninguno';
+            let maxPlays = 0;
+            for (const [audio, plays] of Object.entries(stats.audioPlays)) {
+                if (plays > maxPlays) {
+                    maxPlays = plays;
+                    mostPlayed = `${audio} (${plays} veces)`;
+                }
+            }
+            document.getElementById('mostPlayed').textContent = mostPlayed;
+            
+            if (document.getElementById('adminContent').classList.contains('unlocked')) {
+                renderAudioList();
+            }
         }
 
         function resetStats() {
             if (confirm('¿Estás seguro de resetear las estadísticas?')) {
-                stats = { totalScans: 0, lastScan: 'Ninguno' };
+                stats = { 
+                    totalScans: 0, 
+                    lastScan: 'Ninguno',
+                    audioPlays: {}
+                };
+                audioFiles.forEach(audio => {
+                    stats.audioPlays[audio] = 0;
+                });
                 updateAdminStats();
                 alert('✅ Estadísticas reseteadas');
             }
@@ -528,28 +653,47 @@
             return audioFiles[randomIndex];
         }
 
-        function playAudio(audioFile) {
+        function tryNextAudio(failedAudio) {
+            console.log(`Audio ${failedAudio} no disponible, intentando con otro...`);
+            const availableAudios = audioFiles.filter(audio => audio !== failedAudio);
+            if (availableAudios.length > 0) {
+                const randomIndex = Math.floor(Math.random() * availableAudios.length);
+                playAudio(availableAudios[randomIndex], true);
+            }
+        }
+
+        function playAudio(audioFile, isRetry = false) {
             const audioPath = `audios/${audioFile}`;
             const audioElement = document.getElementById('audioElement');
-            const audioTitle = document.getElementById('audioTitle');
-            const audioPlayer = document.getElementById('audioPlayer');
             
             audioElement.src = audioPath;
-            audioTitle.textContent = `🎵 ${audioFile}`;
-            audioPlayer.classList.add('active');
             
-            audioElement.play().catch(error => {
+            audioElement.play().then(() => {
+                console.log(`Reproduciendo: ${audioFile}`);
+                
+                // Actualizar estadísticas solo si no es un reintento
+                if (!isRetry) {
+                    stats.totalScans++;
+                    stats.lastScan = new Date().toLocaleString('es-ES');
+                }
+                stats.audioPlays[audioFile] = (stats.audioPlays[audioFile] || 0) + 1;
+                
+            }).catch(error => {
                 console.error("Error al reproducir audio:", error);
-                alert('Error al reproducir el audio. Verifica que el archivo existe en la carpeta "audios".');
+                // Intentar con otro audio automáticamente
+                if (!isRetry) {
+                    tryNextAudio(audioFile);
+                }
             });
-
-            // Actualizar estadísticas
-            stats.totalScans++;
-            stats.lastScan = new Date().toLocaleString('es-ES');
         }
 
         // Escáner QR
         function startScanner() {
+            if (isScanning) return;
+
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('scannerActive').classList.remove('hidden');
+
             html5QrcodeScanner = new Html5Qrcode("reader");
             
             const config = { 
@@ -562,9 +706,14 @@
                 { facingMode: "environment" },
                 config,
                 onScanSuccess
-            ).catch(err => {
+            ).then(() => {
+                isScanning = true;
+                console.log("Escáner iniciado correctamente");
+            }).catch(err => {
                 console.error("Error al iniciar el escáner:", err);
                 alert('No se pudo acceder a la cámara. Por favor, permite el acceso a la cámara en tu navegador.');
+                document.getElementById('startScreen').classList.remove('hidden');
+                document.getElementById('scannerActive').classList.add('hidden');
             });
         }
 
@@ -573,17 +722,7 @@
             
             const randomAudio = getRandomAudio();
             playAudio(randomAudio);
-            
-            // Opcional: detener el escáner después de escanear
-            // html5QrcodeScanner.stop();
         }
-
-        // Iniciar automáticamente al cargar la página
-        window.addEventListener('load', function() {
-            setTimeout(() => {
-                startScanner();
-            }, 500);
-        });
     </script>
 </body>
 </html>
