@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escaner QR de Audios</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
+
+        .app-section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 10px;
+        }
+
+        #reader {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        #result {
+            text-align: center;
+            font-size: 1.2rem;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .audio-player {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .audio-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .audio-icon {
+            font-size: 2rem;
+            margin-right: 15px;
+        }
+
+        .audio-title {
+            font-size: 1.3rem;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        button {
+            background: linear-gradient(to right, #4A00E0, #8E2DE2);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 50px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            button {
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Escaner QR de Audios</h1>
+            <p class="subtitle">Escanea cualquier código QR para reproducir un audio aleatorio</p>
+        </header>
+
+        <div class="app-section">
+            <h2 class="section-title">Escanear Código QR</h2>
+            <div id="reader"></div>
+            <div id="result">Esperando escaneo de código QR...</div>
+        </div>
+
+        <div class="app-section">
+            <h2 class="section-title">Reproductor de Audio</h2>
+            <div id="audioPlayer" class="audio-player hidden">
+                <div class="audio-info">
+                    <div class="audio-icon">🎵</div>
+                    <div class="audio-title" id="audioTitle">Audio seleccionado</div>
+                </div>
+                <audio id="audioElement" controls>
+                    Tu navegador no soporta el elemento de audio.
+                </audio>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="scanButton">Iniciar Escáner</button>
+            <button id="randomButton">Reproducir Audio Aleatorio</button>
+        </div>
+
+        <footer>
+            <p>Aplicación Web de Escaneo QR y Reproducción de Audio</p>
+        </footer>
+    </div>
+
+    <!-- Incluir la biblioteca para escanear QR -->
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    
+    <script>
+        // Elementos DOM
+        const scanButton = document.getElementById('scanButton');
+        const randomButton = document.getElementById('randomButton');
+        const resultDiv = document.getElementById('result');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioElement = document.getElementById('audioElement');
+        const audioTitle = document.getElementById('audioTitle');
+
+        // Lista de audios disponibles (debes actualizar esta lista con tus archivos)
+        const audioFiles = [
+            'planta001.mp3',
+            'planta002.mp3',
+            'planta003.mp3'
+            // Agrega más archivos aquí según necesites
+        ];
+
+        // Variable para el escáner QR
+        let html5QrcodeScanner;
+
+        // Función para obtener un audio aleatorio
+        function getRandomAudio() {
+            const randomIndex = Math.floor(Math.random() * audioFiles.length);
+            return audioFiles[randomIndex];
+        }
+
+        // Función para reproducir un audio
+        function playAudio(audioFile) {
+            // Ruta a la carpeta de audios en GitHub
+            const audioPath = `audios/${audioFile}`;
+            
+            // Actualizar el reproductor
+            audioElement.src = audioPath;
+            audioTitle.textContent = `Reproduciendo: ${audioFile}`;
+            audioPlayer.classList.remove('hidden');
+            
+            // Intentar reproducir el audio
+            audioElement.play().catch(error => {
+                console.error("Error al reproducir audio:", error);
+                resultDiv.textContent = `Error al reproducir el audio: ${audioFile}`;
+            });
+            
+            resultDiv.textContent = `Reproduciendo: ${audioFile}`;
+        }
+
+        // Función para inicializar el escáner QR
+        function initQRScanner() {
+            html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", 
+                { 
+                    fps: 10, 
+                    qrbox: { width: 250, height: 250 } 
+                },
+                /* verbose= */ false
+            );
+
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        }
+
+        // Función que se ejecuta cuando se escanea un QR exitosamente
+        function onScanSuccess(decodedText, decodedResult) {
+            console.log(`Código escaneado: ${decodedText}`, decodedResult);
+            resultDiv.textContent = `Código QR escaneado: ${decodedText}`;
+            
+            // Reproducir un audio aleatorio
+            const randomAudio = getRandomAudio();
+            playAudio(randomAudio);
+            
+            // Detener el escáner después de un escaneo exitoso
+            html5QrcodeScanner.clear();
+        }
+
+        // Función que se ejecuta cuando hay un error en el escaneo
+        function onScanFailure(error) {
+            // No hacemos nada con los errores, el escáner seguirá intentando
+            console.warn(`Error en escaneo QR: ${error}`);
+        }
+
+        // Event Listeners
+        scanButton.addEventListener('click', function() {
+            resultDiv.textContent = "Iniciando escáner...";
+            initQRScanner();
+        });
+
+        randomButton.addEventListener('click', function() {
+            const randomAudio = getRandomAudio();
+            playAudio(randomAudio);
+        });
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function() {
+            resultDiv.textContent = "Haz clic en 'Iniciar Escáner' para comenzar";
+        });
+    </script>
+</body>
+</html>
