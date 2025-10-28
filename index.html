@@ -62,6 +62,17 @@
             border-radius: 10px;
             overflow: hidden;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            background-color: #000;
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        #reader video {
+            width: 100%;
+            border-radius: 10px;
         }
 
         #result {
@@ -109,6 +120,7 @@
             justify-content: center;
             gap: 15px;
             margin-top: 20px;
+            flex-wrap: wrap;
         }
 
         button {
@@ -132,8 +144,26 @@
             transform: translateY(1px);
         }
 
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .hidden {
             display: none;
+        }
+
+        .camera-permission {
+            text-align: center;
+            padding: 20px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .permission-btn {
+            background: linear-gradient(to right, #00b09b, #96c93d);
         }
 
         footer {
@@ -154,6 +184,11 @@
             
             button {
                 padding: 10px 20px;
+                width: 100%;
+            }
+
+            .controls {
+                flex-direction: column;
             }
         }
     </style>
@@ -161,14 +196,22 @@
 <body>
     <div class="container">
         <header>
-            <h1>Escaner QR de Audios</h1>
-            <p class="subtitle">Escanea cualquier código QR para reproducir un audio aleatorio</p>
+            <h1>GreenTalk - Escaner QR</h1>
+            <p class="subtitle">Escanea cualquier código QR para reproducir un audio aleatorio de plantas</p>
         </header>
+
+        <div class="camera-permission" id="permissionSection">
+            <h3>Permiso de Cámara Requerido</h3>
+            <p>Para usar el escáner QR, necesitamos acceso a tu cámara.</p>
+            <button id="permissionButton" class="permission-btn">Permitir Cámara</button>
+        </div>
 
         <div class="app-section">
             <h2 class="section-title">Escanear Código QR</h2>
-            <div id="reader"></div>
-            <div id="result">Esperando escaneo de código QR...</div>
+            <div id="reader">
+                <div id="scannerPlaceholder">El escáner se activará aquí</div>
+            </div>
+            <div id="result">Haz clic en "Permitir Cámara" para comenzar</div>
         </div>
 
         <div class="app-section">
@@ -185,12 +228,13 @@
         </div>
 
         <div class="controls">
-            <button id="scanButton">Iniciar Escáner</button>
+            <button id="scanButton" disabled>Iniciar Escáner</button>
             <button id="randomButton">Reproducir Audio Aleatorio</button>
+            <button id="stopButton" disabled>Detener Escáner</button>
         </div>
 
         <footer>
-            <p>Aplicación Web de Escaneo QR y Reproducción de Audio</p>
+            <p>GreenTalk - Aplicación Web de Escaneo QR y Reproducción de Audio</p>
         </footer>
     </div>
 
@@ -199,23 +243,65 @@
     
     <script>
         // Elementos DOM
+        const permissionSection = document.getElementById('permissionSection');
+        const permissionButton = document.getElementById('permissionButton');
         const scanButton = document.getElementById('scanButton');
+        const stopButton = document.getElementById('stopButton');
         const randomButton = document.getElementById('randomButton');
         const resultDiv = document.getElementById('result');
         const audioPlayer = document.getElementById('audioPlayer');
         const audioElement = document.getElementById('audioElement');
         const audioTitle = document.getElementById('audioTitle');
+        const scannerPlaceholder = document.getElementById('scannerPlaceholder');
 
-        // Lista de audios disponibles (debes actualizar esta lista con tus archivos)
+        // Lista de audios disponibles (actualiza con tus archivos reales)
         const audioFiles = [
             'planta001.mp3',
-            'planta002.mp3',
+            'planta002.mp3', 
             'planta003.mp3'
             // Agrega más archivos aquí según necesites
         ];
 
         // Variable para el escáner QR
         let html5QrcodeScanner;
+        let isScanning = false;
+
+        // Verificar si tenemos permisos de cámara
+        async function checkCameraPermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // Si llegamos aquí, tenemos permisos
+                stream.getTracks().forEach(track => track.stop());
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        // Solicitar permisos de cámara
+        async function requestCameraPermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: "environment" 
+                    } 
+                });
+                
+                // Detener el stream inmediatamente (solo queríamos el permiso)
+                stream.getTracks().forEach(track => track.stop());
+                
+                // Ocultar sección de permisos y habilitar botones
+                permissionSection.classList.add('hidden');
+                scanButton.disabled = false;
+                resultDiv.textContent = "Cámara permitida. Haz clic en 'Iniciar Escáner' para comenzar.";
+                
+                return true;
+            } catch (error) {
+                console.error("Error al acceder a la cámara:", error);
+                resultDiv.textContent = "Error: No se pudo acceder a la cámara. Asegúrate de permitir los permisos de cámara.";
+                return false;
+            }
+        }
 
         // Función para obtener un audio aleatorio
         function getRandomAudio() {
@@ -244,16 +330,40 @@
 
         // Función para inicializar el escáner QR
         function initQRScanner() {
+            if (isScanning) return;
+            
             html5QrcodeScanner = new Html5QrcodeScanner(
                 "reader", 
                 { 
                     fps: 10, 
-                    qrbox: { width: 250, height: 250 } 
+                    qrbox: { width: 250, height: 250 },
+                    supportedScanTypes: [
+                        Html5QrcodeScanType.SCAN_TYPE_QR_CODE
+                    ]
                 },
-                /* verbose= */ false
+                false
             );
 
             html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+            isScanning = true;
+            scanButton.disabled = true;
+            stopButton.disabled = false;
+            resultDiv.textContent = "Escaneando... Apunta el código QR a la cámara";
+        }
+
+        // Función para detener el escáner
+        function stopQRScanner() {
+            if (html5QrcodeScanner && isScanning) {
+                html5QrcodeScanner.clear().then(() => {
+                    console.log("Escáner detenido");
+                    isScanning = false;
+                    scanButton.disabled = false;
+                    stopButton.disabled = true;
+                    resultDiv.textContent = "Escáner detenido. Haz clic en 'Iniciar Escáner' para volver a escanear.";
+                }).catch(err => {
+                    console.error("Error al detener escáner:", err);
+                });
+            }
         }
 
         // Función que se ejecuta cuando se escanea un QR exitosamente
@@ -266,19 +376,26 @@
             playAudio(randomAudio);
             
             // Detener el escáner después de un escaneo exitoso
-            html5QrcodeScanner.clear();
+            stopQRScanner();
         }
 
         // Función que se ejecuta cuando hay un error en el escaneo
         function onScanFailure(error) {
-            // No hacemos nada con los errores, el escáner seguirá intentando
-            console.warn(`Error en escaneo QR: ${error}`);
+            // No hacemos nada con los errores comunes, el escáner seguirá intentando
+            if (!error.includes("No MultiFormat Readers")) {
+                console.warn(`Error en escaneo QR: ${error}`);
+            }
         }
 
         // Event Listeners
+        permissionButton.addEventListener('click', requestCameraPermission);
+        
         scanButton.addEventListener('click', function() {
-            resultDiv.textContent = "Iniciando escáner...";
             initQRScanner();
+        });
+
+        stopButton.addEventListener('click', function() {
+            stopQRScanner();
         });
 
         randomButton.addEventListener('click', function() {
@@ -286,9 +403,23 @@
             playAudio(randomAudio);
         });
 
-        // Inicialización
-        document.addEventListener('DOMContentLoaded', function() {
-            resultDiv.textContent = "Haz clic en 'Iniciar Escáner' para comenzar";
+        // Inicialización cuando carga la página
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Verificar si ya tenemos permisos
+            const hasPermission = await checkCameraPermission();
+            
+            if (hasPermission) {
+                permissionSection.classList.add('hidden');
+                scanButton.disabled = false;
+                resultDiv.textContent = "Cámara permitida. Haz clic en 'Iniciar Escáner' para comenzar.";
+            } else {
+                resultDiv.textContent = "Haz clic en 'Permitir Cámara' para habilitar el escáner QR";
+            }
+            
+            // Verificar si estamos en HTTPS (requerido para la cámara)
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                resultDiv.textContent = "ADVERTENCIA: La cámara requiere HTTPS. GitHub Pages ya usa HTTPS, así que esto debería funcionar.";
+            }
         });
     </script>
 </body>
